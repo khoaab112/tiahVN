@@ -9,6 +9,8 @@
             console.log(qualifiedRecords.length);
             // map data 
             var body = [];
+            var material = [];
+            var totolMaterial = [];
             if (qualifiedRecords) {
                 console.log(qualifiedRecords);
                 for (let value of qualifiedRecords) {
@@ -16,7 +18,7 @@
 
                     var bodyChild = {
                         "shipment": {
-                            "re_no": value.受注No_mimosa.value,
+                            "re_no": value.受注No_mimosa.value || '1231',
                             "ctg_code": Number(value.出荷種別.value) || 10,
                             "carrier_timezone": "UTC+09:00",
                             "dlv_nt_cmt": value.受注No_PCA.value,
@@ -34,7 +36,6 @@
                             "cmm_hdr_crr_cns": 0,
                             "chg_wto_cns": 0,
                             "chg_cns": 0,
-                            "cmt": 0,
                             "shr_code": 10,
                             "unit_report_pattern_code": 1,
                             "limited_use_at": value.納品日.value,
@@ -56,31 +57,31 @@
                             "rnk_element_code": 10,
                             "is_dlv_nt_required": 1,
                             "contact": {
-                                "zip": "string",
-                                "country": 111,
-                                "country_cd": "`JP` `JPN` `392`\n",
+                                "zip": "204-0000",
+                                "country": '111',
+                                "country_cd": "JP",
                             }
                         },
                         "delivery": {
-                            "dep_nm": value.部門名.value,
+                            "dep_nm": value.部門名.value || '204-0000',
                             "contact": {
-                                "zip": value.郵便番号.value,
-                                "country": 111,
-                                "country_cd": "`JP` `JPN` `392`\n",
+                                "zip": value.郵便番号.value || "204-0000",
+                                "country": '111',
+                                "country_cd": "JP",
                             }
                         },
                         "deliveryNote": {
                             "is_company": 0,
                             "contact": {
-                                "zip": "string",
-                                "country": 111,
-                                "country_cd": "`JP` `JPN` `392`\n",
+                                "zip": "204-0000",
+                                "country": '111',
+                                "country_cd": "JP",
                             }
                         },
                         "shipmentDetails": [{
                             "re_dtl_no": value.受注明細番号_mimosa.value,
                             "sch_qty": value.受注数.value,
-                            "material_cd": value.商品コード_JANコード.value,
+                            "material_cd": value.商品コード_JANコード.value, //
                             "lot_no": value.得意先コード.value,
                             "needs_dlv_nt": 1,
                             "needs_pck_lst": 1,
@@ -93,15 +94,49 @@
                         }]
                     };
                     body.push(bodyChild);
+                    material.push('C0002');
+                    // material.push(value.商品コード_JANコード.value);
+                    // totolMaterial.push(value.受注数.value);
+                    totolMaterial.push({
+                        'name': value.商品コード_JANコード.value,
+                        'quantity': value.受注数.value
+                    });
+                    // material.push('C0002');
                 };
                 // body.push(bodyChild);
                 const token = await getVerificationCode();
                 const path = '/jwt/v2/shipment/batchCreate';
+                //  get stock by material_cd 
+                const getMaterial = await getStockByMaterial(material, token);
+                if (getMaterial.total <= 0) {
+                    return;
+                }
+                //mặc định đang trả về một bản ghi
+                //pading
+                //số lượng trong kho 
+                const results = (getMaterial.data).map(value => ({
+                    name: value.stock.material_cd,
+                    inventory: value.stock.ursv_qty
+                }));
+                // lấy số lượng trong kho so sánh với data thực tại , xem cái nào thỏa màn điều kiện
+                // results vs totolMaterial
+                const arrNamesQualified = [];
+                for (let value of results) {
+                    let result = totolMaterial.find(item => item.name === value.name);
+                    if (result.quantity < value.inventory)
+                        arrNamesQualified.push(result.name)
+                }
+                // kết quả , tên nhưng mã sản phẩm thỏa mãn điều kiện : arrNamesQualified =[];
 
-                const responseShipments = await postShipments(token, path, body);
-                console.log(responseShipments);
+                console.log(results);
+                //mặc định đang trả về một bản ghi
+                //so sánh 
+
+
+
+
+
             }
-
             console.log(53, body);
 
         }
@@ -109,7 +144,45 @@
 
     });
 })();
+//get stock by material_cd 
+async function getStockByMaterial(material_cd, token) {
+    const material = material_cd;
+    const limit = 5000;
+    const offset = 0;
+    const method = 'GET';
+    var lengthMaterial = material.length
+    var path = '/jwt/v2/stock/find?';
+    material.forEach((value, index) => {
+        console.log(index, value);
+        path += "material_cd[]=" + value
+        if (index < (lengthMaterial - 1)) {
+            path += "&";
+        }
+    });
+    var headers = {
+        'Authorization': 'Bearer ' + token.token,
+        'X-UNITID': token.units.id,
+        'Content-Type': 'application/json',
+    };
+    var domain = 'https://mimosa-stg.dialog-wms.com' + path + '&limit=' + limit + '&offset=' + offset;
+    var body = '';
 
+    return kintone.proxy(domain, method, headers, body)
+        .then(function(response) { // [b, status, h]
+            var responseBody = JSON.parse(response[0]);
+            return responseBody;
+        })
+        .catch(function(error) {
+            console.log(error);
+            return error;
+        });
+};
+
+
+
+// // const responseGet = await callAPIMimosa(path, "GET", headers, '', 5000, 0);
+// return responseGet;
+// }
 
 
 //get all stock
@@ -153,14 +226,9 @@ async function postShipments(token, path, body) {
     };
     // var bodyPost = JSON.parse(body);
     var bodyPost = JSON.stringify(body);
-    Array.isArray(body)
-    console.log(75, body);
     try {
         const response = await kintone.proxy(domain, "POST", headers, bodyPost);
-        console.log(76, response);
-
         var responseBody = JSON.parse(response[0]);
-        console.log(22, responseBody);
         return responseBody;
     } catch (error) {
         console.log(error);
