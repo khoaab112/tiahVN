@@ -1,7 +1,7 @@
 (function() {
     'use strict';
     kintone.events.on('app.record.index.show', function(event) {
-
+        // part 1
         const create出荷指示書 = document.getElementById('create_出荷指示書');
         create出荷指示書.onclick = async function() {
             // lấy hết bản ghi của app thỏa mãn điều kiện
@@ -94,17 +94,13 @@
                         }]
                     };
                     body.push(bodyChild);
-                    material.push('C0002');
-                    // material.push(value.商品コード_JANコード.value);
-                    // totolMaterial.push(value.受注数.value);
+                    // material.push('C0002');
+                    material.push(value.商品コード_JANコード.value);
                     totolMaterial.push({
-                        // 'name': value.商品コード_JANコード.value,
-                        'name': 'C0002',
+                        'name': value.商品コード_JANコード.value,
                         'quantity': value.受注数.value
                     });
-                    // material.push('C0002');
                 };
-                // body.push(bodyChild);
                 const token = await getVerificationCode();
                 const path = '/jwt/v2/shipment/batchCreate';
                 //  get stock by material_cd 
@@ -112,13 +108,34 @@
                 if (getMaterial.total <= 0) {
                     return;
                 }
-                //mặc định đang trả về một bản ghi
-                //pading
+                //trả về nhiều bản ghi
                 //số lượng trong kho 
-                const results = (getMaterial.data).map(value => ({
-                    name: value.stock.material_cd,
-                    inventory: value.stock.ursv_qty
-                }));
+
+                // const results = (getMaterial.data).map(value => ({
+                //     name: value.stock.material_cd,
+                //     inventory: value.stock.ursv_qty
+                // }));
+
+
+                const results = [];
+                getMaterial.data.forEach(item => {
+                    const name = item.stock.material_cd;
+                    const inventory = item.stock.ursv_qty;
+
+                    if (!results[name]) {
+                        results[name] = inventory;
+                    } else {
+                        results[name] += inventory;
+                    }
+                });
+
+
+
+
+
+
+
+
                 // lấy số lượng trong kho so sánh với data thực tại , xem cái nào thỏa màn điều kiện
                 // results vs totolMaterial
                 const arrNamesQualified = [];
@@ -144,6 +161,108 @@
 
 
     });
+    kintone.events.on('app.record.create.submit', async function(event) {
+        const verificationData = event.record;
+        if (verificationData.処理ステータス.value == '在庫チェック済' || verificationData.処理ステータス.value == 'セット品確認済') {
+            // tên mã sp
+            var material_cd = [verificationData.商品コード_JANコード.value];
+            // var material_cd = ['C0002'];
+            //số lượng
+            var quantity = verificationData.受注数.value;
+            const token = await getVerificationCode();
+            const isExistMaterial = await getStockByMaterial(material_cd, token);
+            const path = '/jwt/v2/shipment';
+            if (isExistMaterial.total <= 0) {
+                return event;
+            }
+            var resultSearchQuantity = isExistMaterial.data[0].stock.ursv_qty
+            if (resultSearchQuantity < quantity) {
+                return event;
+            }
+            var body = {
+                "shipment": {
+                    "re_no": verificationData.受注No_mimosa.value || '1231',
+                    "ctg_code": Number(verificationData.出荷種別.value) || 10,
+                    "carrier_timezone": "UTC+09:00",
+                    "dlv_nt_cmt": verificationData.受注No_PCA.value,
+                    "re_dttm": verificationData.受注日.value,
+                    "sch_shp_dt": verificationData.納品日.value,
+                    "carrier": "ヤマト運輸",
+                    "dlv_nt_no": verificationData.受注No2.value,
+                    "needs_dlv_nt_att": 1,
+                    "needs_dlv_nt_prc": 0,
+                    "dlv_nt_code": 10,
+                    "crr_fee_code": 10,
+                    "crr_fee_wto_cns": 0,
+                    "crr_fee_cns": 0,
+                    "cmm_hdr_crr_wto_cns": 0,
+                    "cmm_hdr_crr_cns": 0,
+                    "chg_wto_cns": 0,
+                    "chg_cns": 0,
+                    "shr_code": 10,
+                    "unit_report_pattern_code": 1,
+                    "limited_use_at": verificationData.納品日.value,
+                    "add_pnt": 0,
+                    "use_pnt": 0,
+                    "sum_pnt": 0,
+                    "pay_by_cpn": 0,
+                    "pay_by_pnt": 0,
+                    "reg_srv_nxt_sh_dt": verificationData.納品日.value,
+                    "needs_receipt": 0,
+                    "needs_wrap": 0,
+                    "wrp_ctg_unit_code_id": 99,
+                    "wrp_fee": 0,
+                    "needs_ppr": 0,
+                    "ppr_ctg_unit_code": 99,
+                },
+                "client": {
+                    "is_company": 1,
+                    "rnk_element_code": 10,
+                    "is_dlv_nt_required": 1,
+                    "contact": {
+                        "zip": "204-0000",
+                        "country": '111',
+                        "country_cd": "JP",
+                    }
+                },
+                "delivery": {
+                    "dep_nm": verificationData.部門名.value || '204-0000',
+                    "contact": {
+                        "zip": verificationData.郵便番号.value || "204-0000",
+                        "country": '111',
+                        "country_cd": "JP",
+                    }
+                },
+                "deliveryNote": {
+                    "is_company": 0,
+                    "contact": {
+                        "zip": "204-0000",
+                        "country": '111',
+                        "country_cd": "JP",
+                    }
+                },
+                "shipmentDetails": [{
+                    "re_dtl_no": verificationData.受注明細番号_mimosa.value,
+                    "sch_qty": verificationData.受注数.value,
+                    "material_cd": verificationData.商品コード_JANコード.value,
+                    // "material_cd": 'C0002',
+                    "lot_no": verificationData.得意先コード.value,
+                    "needs_dlv_nt": 1,
+                    "needs_pck_lst": 1,
+                    "qty_in_pck": 1,
+                    "material_cd_for_dlv_nt": verificationData.先方商品コード.value,
+                    "material_nm_for_dlv_nt": verificationData.品名.value
+                }],
+                "shipmentSmallLots": [{
+                    "tmp_code": 10,
+                }]
+            };
+            const resultPost = await postShipments(token, path, body);
+            event.record.受注No_mimosa.value = resultPost.shipment.id
+            return event;
+        }
+    });
+
 })();
 //get stock by material_cd 
 async function getStockByMaterial(material_cd, token) {
