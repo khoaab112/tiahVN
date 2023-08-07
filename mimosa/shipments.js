@@ -6,19 +6,18 @@
         create出荷指示書.onclick = async function() {
             // lấy hết bản ghi của app thỏa mãn điều kiện
             const qualifiedRecords = await fetchBatchRecords();
-            console.log(qualifiedRecords.length);
             // map data 
             var body = [];
             var material = [];
             var totolMaterial = [];
+            var idRecords = [];
+            //test
+            // var testIndex = 0;
             if (qualifiedRecords) {
-                console.log(qualifiedRecords);
                 for (let value of qualifiedRecords) {
-                    console.log(value);
-
                     var bodyChild = {
                         "shipment": {
-                            "re_no": value.受注No_mimosa.value || '1231',
+                            "re_no": value.受注No_mimosa.value || '123',
                             "ctg_code": Number(value.出荷種別.value) || 10,
                             "carrier_timezone": "UTC+09:00",
                             "dlv_nt_cmt": value.受注No_PCA.value,
@@ -45,6 +44,7 @@
                             "pay_by_cpn": 0,
                             "pay_by_pnt": 0,
                             "reg_srv_nxt_sh_dt": value.納品日.value,
+                            // "reg_srv_nxt_sh_dt": '2023/7/8',
                             "needs_receipt": 0,
                             "needs_wrap": 0,
                             "wrp_ctg_unit_code_id": 99,
@@ -81,7 +81,9 @@
                         "shipmentDetails": [{
                             "re_dtl_no": value.受注明細番号_mimosa.value,
                             "sch_qty": value.受注数.value,
-                            "material_cd": value.商品コード_JANコード.value, //
+                            "sch_qty": 1,
+                            "material_cd": value.商品コード_JANコード.value || "",
+                            // "material_cd": "C0002" + (testIndex == 0 ? "" : testIndex),
                             "lot_no": value.得意先コード.value,
                             "needs_dlv_nt": 1,
                             "needs_pck_lst": 1,
@@ -93,11 +95,17 @@
                             "tmp_code": 10,
                         }]
                     };
+                    //test
+                    // testIndex++;
+                    //
+                    idRecords.push(value.$id.value)
                     body.push(bodyChild);
+                    // comment test
                     // material.push('C0002');
                     material.push(value.商品コード_JANコード.value);
                     totolMaterial.push({
                         'name': value.商品コード_JANコード.value,
+                        // 'name': 'C0002',
                         'quantity': value.受注数.value
                     });
                 };
@@ -111,29 +119,25 @@
                 //trả về nhiều bản ghi
                 //số lượng trong kho 
 
-                // const results = (getMaterial.data).map(value => ({
-                //     name: value.stock.material_cd,
-                //     inventory: value.stock.ursv_qty
-                // }));
+                const result = {};
 
-
-                const results = [];
                 getMaterial.data.forEach(item => {
-                    const name = item.stock.material_cd;
-                    const inventory = item.stock.ursv_qty;
+                    const material_cd = item.stock.material_cd;
+                    const ursv_qty = item.stock.ursv_qty;
 
-                    if (!results[name]) {
-                        results[name] = inventory;
+                    if (!result[material_cd]) {
+                        result[material_cd] = ursv_qty;
                     } else {
-                        results[name] += inventory;
+                        result[material_cd] += ursv_qty;
                     }
                 });
 
-
-
-
-
-
+                const results = Object.entries(result).map(([name, inventory]) => {
+                    return {
+                        'name': name,
+                        'inventory': inventory
+                    };
+                });
 
 
                 // lấy số lượng trong kho so sánh với data thực tại , xem cái nào thỏa màn điều kiện
@@ -148,13 +152,40 @@
                 // nếu có giá trị , so sánh rồi xóa những phần tử không phù hợp của body rồi đầy vào
                 if (arrNamesQualified) {
                     body.forEach((valueBody, index) => {
-                        const isExist = arrNamesQualified.indexOf(valueBody.shipmentDetails.material_cd);
+                        const isExist = arrNamesQualified.indexOf(valueBody.shipmentDetails[0].material_cd);
                         if (isExist < 0) {
                             body.splice(index, 1);
+                            idRecords.splice(index, 1);
                         }
                     });
                     //đẩy vào
-                    await postShipments(token, path, body);
+                    const resultPostShipments = await postShipments(token, path, body);
+                    var idShipments = [];
+                    resultPostShipments.forEach((value, index) => {
+                        idShipments.push({
+                            "id_ship": value.shipment.id,
+                            "re_no": value.shipment.re_no,
+                            "id_record": idRecords[index]
+                        });
+                    })
+
+                    const bodyUpdateId = {
+                        'app': 189,
+                        'records': []
+                    }
+                    for (let value of idShipments) {
+                        bodyUpdateId.records.push({
+                            'id': value.id_record,
+                            'record': {
+                                "ID_Mimosa": {
+                                    "type": "NUMBER",
+                                    "value": value.id_ship
+                                },
+                            }
+                        });
+                    }
+                    const resultUpdateApp = await updateApp(bodyUpdateId);
+
                 }
             }
         }
@@ -258,7 +289,7 @@
                 }]
             };
             const resultPost = await postShipments(token, path, body);
-            event.record.受注No_mimosa.value = resultPost.shipment.id
+            event.record.ID_Mimosa.value = Number(resultPost.shipment.id);
             return event;
         }
     });
@@ -273,7 +304,6 @@ async function getStockByMaterial(material_cd, token) {
     var lengthMaterial = material.length
     var path = '/jwt/v2/stock/find?';
     material.forEach((value, index) => {
-        console.log(index, value);
         path += "material_cd[]=" + value
         if (index < (lengthMaterial - 1)) {
             path += "&";
@@ -327,7 +357,6 @@ async function getAllStock(token) {
             allRecords = allRecords.concat(records);
             offset += limit;
         } catch (error) {
-            console.error('Lỗi khi lấy dữ liệu từ API:', error.message);
             break;
         }
     }
@@ -371,7 +400,6 @@ async function getTokenMimosa() {
     try {
         const response = await kintone.proxy(pathLogin, "POST", header, body);
         var responseBody = JSON.parse(response[0]);
-        console.log(22, responseBody);
         return responseBody;
     } catch (error) {
         console.log(error);
@@ -462,7 +490,6 @@ async function getVerificationCode() {
     }
     var timeToken = token.created_at;
     var timeExpiry = token.expires_in;
-    console.log(compareTime(timeToken, timeExpiry));
     if (!compareTime(timeToken, timeExpiry)) {
         clearStorage();
         await setStorage(await getTokenMimosa());
@@ -497,7 +524,6 @@ function fetchBatchRecords() {
                     // Tiếp tục lấy các lô bản ghi cho đến khi đạt đủ số lượng bản ghi
                     fetchRecords();
                 } else {
-                    console.log('Tất cả các bản ghi đã được lấy:', allRecords);
                     resolve(allRecords);
                 }
             }, function(error) {
@@ -506,5 +532,19 @@ function fetchBatchRecords() {
         }
 
         fetchRecords();
+    });
+}
+//update app
+async function updateApp(body) {
+    return new Promise((resolve, reject) => {
+        kintone.api(kintone.api.url('/k/v1/records', true), 'PUT', body, function(resp) {
+            // success
+            console.log(resp);
+            resolve(resp);
+        }, function(error) {
+            // error
+            console.log(error);
+            reject(error);
+        });
     });
 }
