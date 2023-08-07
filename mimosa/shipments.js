@@ -538,11 +538,8 @@ function fetchBatchRecords() {
 async function updateApp(body) {
     return new Promise((resolve, reject) => {
         kintone.api(kintone.api.url('/k/v1/records', true), 'PUT', body, function(resp) {
-            // success
-            console.log(resp);
             resolve(resp);
         }, function(error) {
-            // error
             console.log(error);
             reject(error);
         });
