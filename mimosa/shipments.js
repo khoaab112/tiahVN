@@ -98,7 +98,8 @@
                     // material.push(value.商品コード_JANコード.value);
                     // totolMaterial.push(value.受注数.value);
                     totolMaterial.push({
-                        'name': value.商品コード_JANコード.value,
+                        // 'name': value.商品コード_JANコード.value,
+                        'name': 'C0002',
                         'quantity': value.受注数.value
                     });
                     // material.push('C0002');
@@ -127,18 +128,18 @@
                         arrNamesQualified.push(result.name)
                 }
                 // kết quả , tên nhưng mã sản phẩm thỏa mãn điều kiện : arrNamesQualified =[];
-
-                console.log(results);
-                //mặc định đang trả về một bản ghi
-                //so sánh 
-
-
-
-
-
+                // nếu có giá trị , so sánh rồi xóa những phần tử không phù hợp của body rồi đầy vào
+                if (arrNamesQualified) {
+                    body.forEach((valueBody, index) => {
+                        const isExist = arrNamesQualified.indexOf(valueBody.shipmentDetails.material_cd);
+                        if (isExist < 0) {
+                            body.splice(index, 1);
+                        }
+                    });
+                    //đẩy vào
+                    await postShipments(token, path, body);
+                }
             }
-            console.log(53, body);
-
         }
 
 
