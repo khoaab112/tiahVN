@@ -583,5 +583,20 @@
 
             offset += batchSize;
         }
+    };
+
+    function extractCode(input) {
+        // Sử dụng biểu thức chính quy để tìm phần chữ cái đầu tiên trong chuỗi
+        const match = input.match(/[A-Za-z]+/);
+
+        // Nếu có kết quả từ việc tìm kiếm
+        if (match) {
+            // Trả về phần còn lại của chuỗi sau khi đã loại bỏ phần chữ cái đầu tiên
+            return input.replace(match[0], '');
+        }
+
+        // Nếu không tìm thấy phần chữ cái, trả về chuỗi ban đầu
+        return input;
     }
+
 })();
